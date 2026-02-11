@@ -23,7 +23,8 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     exit;
 }
 
-$baseUrl = "https://api-spreadsheet.goodlifemicrolending.com";
+// $baseUrl = "http://localhost:3000";
+$baseUrl = "https://staging.goodlifemicrolending.com";
 
 $clusterIds = isset($_GET["clusterIds"]) ? $_GET["clusterIds"] : null;
 
