@@ -23,7 +23,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     exit;
 }
 
-$baseUrl = getenv("APP_URL") ?: "http://localhost:3000";
+$baseUrl = $_ENV["APP_URL"] ?: "http://localhost:3000";
 
 $clusterIds = isset($_GET["clusterIds"]) ? $_GET["clusterIds"] : null;
 
