@@ -116,14 +116,16 @@ foreach ($templateGroups as $templateKey => $groups) {
             $row = $clientStartRow;
 
             foreach ($cluster["clients"] ?? [] as $index => $client) {
+                $fullName = trim(
+                    ucwords(strtolower(
+                        ($client["client"]["firstName"] ?? '') . " " .
+                            ($client["client"]["middleName"] ?? '') . " " .
+                            ($client["client"]["lastName"] ?? '')
+                    ))
+                );
 
                 $newSheet->setCellValue("A{$row}", $index + 1);
-                $newSheet->setCellValue(
-                    "B{$row}",
-                    $client["client"]["firstName"] . " " .
-                        $client["client"]["middleName"] . " " .
-                        $client["client"]["lastName"]
-                );
+                $newSheet->setCellValue("B{$row}", $fullName);
                 $newSheet->setCellValue("C{$row}", $client["loanReceivable"] ?? 0);
                 $newSheet->setCellValue("D{$row}", $client["skCumulative"] ?? 0);
                 $newSheet->setCellValue("E{$row}", $client["pastDue"] ?? 0);
