@@ -1,39 +1,33 @@
 FROM php:8.3-apache
 
-# Set working directory
 WORKDIR /var/www/html
 
-# Copy application files to the container
+# Copy application files
 COPY . /var/www/html/
 
-# Copy Apache configuration
+# Copy Apache configuration (must use port 80)
 COPY apache.conf /etc/apache2/sites-available/000-default.conf
 
-# Enable Apache mod_rewrite
+# Enable mod_rewrite
 RUN a2enmod rewrite
 
-# Enable the site configuration
-RUN a2ensite 000-default.conf
+# DO NOT run a2ensite (already enabled by default)
+# RUN a2ensite 000-default.conf  <-- remove this
 
-# Install necessary PHP extensions for PHPSpreadsheet
+# Install required extensions for PhpSpreadsheet
 RUN apt-get update && apt-get install -y \
     libzip-dev \
     unzip \
     && docker-php-ext-install zip pdo pdo_mysql \
-    && docker-php-ext-enable zip
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Set the ServerName to suppress warnings
+# Set ServerName
 RUN echo "ServerName api-spreadsheet.goodlifemicrolending.com" >> /etc/apache2/apache2.conf
 
-# Expose port based on Railway's dynamic port assignment
 ENV APP_URL=api-spreadsheet.goodlifemicrolending.com
 
-ENV PORT 8080
-EXPOSE 8080
+# Railway expects container to listen on 80
+EXPOSE 80
 
-# Update Apache to listen on Railway's dynamic port
-RUN sed -i "s/Listen 80/Listen ${PORT}/g" /etc/apache2/ports.conf \
-    && sed -i "s/<VirtualHost \*:80>/<VirtualHost *:${PORT}>/g" /etc/apache2/sites-available/000-default.conf
-
-# Start Apache server
 CMD ["apache2-foreground"]
