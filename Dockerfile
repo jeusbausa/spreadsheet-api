@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y \
 # Set the ServerName to suppress warnings
 RUN echo "ServerName api-spreadsheet.goodlifemicrolending.com" >> /etc/apache2/apache2.conf
 
-ENV APP_ENV=production
+ENV APP_ENV production
 
 # Expose port based on Railway's dynamic port assignment
 ENV PORT 8080
