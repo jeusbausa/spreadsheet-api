@@ -7,7 +7,6 @@ require __DIR__ . "/vendor/autoload.php";
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 
-
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
@@ -24,7 +23,13 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     exit;
 }
 
-$ch = curl_init("http://localhost:3000/api/export");
+$baseUrl = getenv("APP_URL") ?: "http://localhost:3000";
+
+$clusterIds = isset($_GET["clusterIds"]) ? $_GET["clusterIds"] : null;
+
+$url = "{$baseUrl}/api/export?clusterIds={$clusterIds}";
+
+$ch = curl_init($url);
 
 curl_setopt_array($ch, [
     CURLOPT_POST => true,
@@ -58,274 +63,97 @@ $templateGroups = $apiResponse["data"]["clusters"];
 $finalSpreadsheet = new Spreadsheet();
 $finalSpreadsheet->removeSheetByIndex(0);
 
+$templateConfig = [
+    "template_2"  => ["path" => "/templates/excel/4-ccl-p2.xlsx",  "spacing" => 10],
+    "template_10" => ["path" => "/templates/excel/2-ccl-p10.xlsx", "spacing" => 18],
+    "template_15" => ["path" => "/templates/excel/2-ccl-p15.xlsx", "spacing" => 22],
+    "template_20" => ["path" => "/templates/excel/2-ccl-p20.xlsx", "spacing" => 27],
+];
 
 foreach ($templateGroups as $templateKey => $groups) {
 
-    if ($templateKey === "template_2") {
+    if (!isset($templateConfig[$templateKey])) {
+        continue;
+    }
 
-        $spreadsheet = IOFactory::load(__DIR__ . "/templates/excel/4-ccl-p2.xlsx");
-        $templateSheet = $spreadsheet->getSheet(0);
-        $templateTitle = $templateSheet->getTitle();
+    $spreadsheet = IOFactory::load(__DIR__ . $templateConfig[$templateKey]["path"]);
+    $templateSheet = $spreadsheet->getSheet(0);
+    $templateTitle = $templateSheet->getTitle();
+    $spacing = $templateConfig[$templateKey]["spacing"];
 
-        $count = count($groups);
+    $count = count($groups);
 
-        for ($i = 1; $i <= $count; $i++) {
+    for ($i = 1; $i <= $count; $i++) {
 
-            $newSheet = $spreadsheet->duplicateWorksheetByTitle($templateTitle);
-            $rowCluster = 4;
+        $newSheet = $spreadsheet->duplicateWorksheetByTitle($templateTitle);
+        $rowCluster = 4;
 
-            foreach ($groups["group_" . $i] as $_i => $cluster) {
+        foreach ($groups["group_" . $i] as $_i => $cluster) {
 
-                $staffName = strtoupper($cluster["assignedStaff"]["firstName"] . " " . $cluster["assignedStaff"]["lastName"]);
-                $clusterCode = strtoupper($cluster["assignedStaff"]["codeName"] . "-" . $cluster["code"]);
+            $staffName = strtoupper(
+                $cluster["assignedStaff"]["firstName"] . " " .
+                    $cluster["assignedStaff"]["lastName"]
+            );
 
-                $clientStartRow = $rowCluster + 3;
+            $clusterCode = strtoupper(
+                $cluster["assignedStaff"]["codeName"] . "-" .
+                    $cluster["code"]
+            );
 
-                $newSheet->setCellValue("C{$rowCluster}", $staffName);
-                $newSheet->SetCellValue("G{$rowCluster}", date_format(date_create($cluster["dateOfRelease"]), "F j, Y"));
-                $newSheet->SetCellValue("K{$rowCluster}", date("F j, Y"));
+            $clientStartRow = $rowCluster + 3;
 
-                $newSheet->setCellValue("C" . ($rowCluster + 1), $clusterCode);
-                $newSheet->SetCellValue("G" . ($rowCluster + 1), date_format(date_create($cluster["dateOfFirstPayment"]), "F j, Y"));
-                $newSheet->SetCellValue("K" . ($rowCluster + 1), str_replace("WEEKS_", "", $cluster["loanTerm"]) . " Weeks");
+            $newSheet->setCellValue("C{$rowCluster}", $staffName);
+            $newSheet->setCellValue("G{$rowCluster}", date_format(date_create($cluster["dateOfRelease"]), "F j, Y"));
+            $newSheet->setCellValue("K{$rowCluster}", date("F j, Y"));
 
-                $row = $clientStartRow;
+            $newSheet->setCellValue("C" . ($rowCluster + 1), $clusterCode);
+            $newSheet->setCellValue("G" . ($rowCluster + 1), date_format(date_create($cluster["dateOfFirstPayment"]), "F j, Y"));
+            $newSheet->setCellValue("K" . ($rowCluster + 1), str_replace("WEEKS_", "", $cluster["loanTerm"]) . " Weeks");
 
-                foreach ($cluster["clients"] ?? [] as $index => $client) {
+            $row = $clientStartRow;
 
-                    $newSheet->setCellValue("A{$row}", $index + 1);
-                    $newSheet->setCellValue("B{$row}", ($client["client"]["firstName"] . " " . $client["client"]["middleName"] . " " . $client["client"]["lastName"]));
-                    $newSheet->setCellValue("C{$row}", $client["loanReceivable"] ?? 0);
-                    $newSheet->setCellValue("D{$row}", $client["skCumulative"] ?? 0);
-                    $newSheet->setCellValue("E{$row}", $client["pastDue"] ?? 0);
-                    $newSheet->setCellValue("G{$row}", $client["weeklyInstallment"] ?? 0);
+            foreach ($cluster["clients"] ?? [] as $index => $client) {
 
-                    $row++;
-                }
+                $newSheet->setCellValue("A{$row}", $index + 1);
+                $newSheet->setCellValue(
+                    "B{$row}",
+                    $client["client"]["firstName"] . " " .
+                        $client["client"]["middleName"] . " " .
+                        $client["client"]["lastName"]
+                );
+                $newSheet->setCellValue("C{$row}", $client["loanReceivable"] ?? 0);
+                $newSheet->setCellValue("D{$row}", $client["skCumulative"] ?? 0);
+                $newSheet->setCellValue("E{$row}", $client["pastDue"] ?? 0);
+                $newSheet->setCellValue("G{$row}", $client["weeklyInstallment"] ?? 0);
 
-                $rowCluster += 10;
-            }
-        }
-
-        $spreadsheet->removeSheetByIndex(0);
-
-        foreach ($spreadsheet->getAllSheets() as $sheet) {
-
-            $originalTitle = $sheet->getTitle();
-            $newTitle = $originalTitle;
-            $counter = 1;
-
-            while ($finalSpreadsheet->sheetNameExists($newTitle)) {
-                $newTitle = $originalTitle . " " . $counter;
-                $counter++;
+                $row++;
             }
 
-            $sheet->setTitle($newTitle);
-            $finalSpreadsheet->addExternalSheet($sheet);
+            $rowCluster += $spacing;
         }
     }
 
-    if ($templateKey === "template_10") {
+    $spreadsheet->removeSheetByIndex(0);
 
-        $spreadsheet = IOFactory::load(__DIR__ . "/templates/excel/2-ccl-p10.xlsx");
-        $templateSheet = $spreadsheet->getSheet(0);
-        $templateTitle = $templateSheet->getTitle();
+    foreach ($spreadsheet->getAllSheets() as $sheet) {
 
-        $count = count($groups);
+        $originalTitle = $sheet->getTitle();
+        $newTitle = $originalTitle;
+        $counter = 1;
 
-        for ($i = 1; $i <= $count; $i++) {
-
-            $newSheet = $spreadsheet->duplicateWorksheetByTitle($templateTitle);
-            $rowCluster = 4;
-
-            foreach ($groups["group_" . $i] as $_i => $cluster) {
-
-                $staffName = strtoupper($cluster["assignedStaff"]["firstName"] . " " . $cluster["assignedStaff"]["lastName"]);
-                $clusterCode = strtoupper($cluster["assignedStaff"]["codeName"] . "-" . $cluster["code"]);
-
-                $clientStartRow = $rowCluster + 3;
-
-                $newSheet->setCellValue("C{$rowCluster}", $staffName);
-                $newSheet->SetCellValue("G{$rowCluster}", date_format(date_create($cluster["dateOfRelease"]), "F j, Y"));
-                $newSheet->SetCellValue("K{$rowCluster}", date("F j, Y"));
-
-                $newSheet->setCellValue("C" . ($rowCluster + 1), $clusterCode);
-                $newSheet->SetCellValue("G" . ($rowCluster + 1), date_format(date_create($cluster["dateOfFirstPayment"]), "F j, Y"));
-                $newSheet->SetCellValue("K" . ($rowCluster + 1), str_replace("WEEKS_", "", $cluster["loanTerm"]) . " Weeks");
-
-
-                $row = $clientStartRow;
-
-                foreach ($cluster["clients"] ?? [] as $index => $client) {
-
-                    $newSheet->setCellValue("A{$row}", $index + 1);
-                    $newSheet->setCellValue("B{$row}", ($client["client"]["firstName"] . " " . $client["client"]["middleName"] . " " . $client["client"]["lastName"]));
-                    $newSheet->setCellValue("C{$row}", $client["loanReceivable"] ?? 0);
-                    $newSheet->setCellValue("D{$row}", $client["skCumulative"] ?? 0);
-                    $newSheet->setCellValue("E{$row}", $client["pastDue"] ?? 0);
-                    $newSheet->setCellValue("G{$row}", $client["weeklyInstallment"] ?? 0);
-
-                    $row++;
-                }
-
-                $rowCluster += 18;
-            }
+        while ($finalSpreadsheet->sheetNameExists($newTitle)) {
+            $newTitle = $originalTitle . " " . $counter;
+            $counter++;
         }
 
-        $spreadsheet->removeSheetByIndex(0);
-
-        foreach ($spreadsheet->getAllSheets() as $sheet) {
-
-            $originalTitle = $sheet->getTitle();
-            $newTitle = $originalTitle;
-            $counter = 1;
-
-            while ($finalSpreadsheet->sheetNameExists($newTitle)) {
-                $newTitle = $originalTitle . " " . $counter;
-                $counter++;
-            }
-
-            $sheet->setTitle($newTitle);
-            $finalSpreadsheet->addExternalSheet($sheet);
-        }
-    }
-
-    if ($templateKey === "template_15") {
-
-        $spreadsheet = IOFactory::load(__DIR__ . "/templates/excel/2-ccl-p15.xlsx");
-        $templateSheet = $spreadsheet->getSheet(0);
-        $templateTitle = $templateSheet->getTitle();
-
-        $count = count($groups);
-
-        for ($i = 1; $i <= $count; $i++) {
-
-            $newSheet = $spreadsheet->duplicateWorksheetByTitle($templateTitle);
-            $rowCluster = 4;
-
-            foreach ($groups["group_" . $i] as $_i => $cluster) {
-
-                $staffName = strtoupper($cluster["assignedStaff"]["firstName"] . " " . $cluster["assignedStaff"]["lastName"]);
-                $clusterCode = strtoupper($cluster["assignedStaff"]["codeName"] . "-" . $cluster["code"]);
-
-                $clientStartRow = $rowCluster + 3;
-
-                $newSheet->setCellValue("C{$rowCluster}", $staffName);
-                $newSheet->SetCellValue("G{$rowCluster}", date_format(date_create($cluster["dateOfRelease"]), "F j, Y"));
-                $newSheet->SetCellValue("K{$rowCluster}", date("F j, Y"));
-
-                $newSheet->setCellValue("C" . ($rowCluster + 1), $clusterCode);
-                $newSheet->SetCellValue("G" . ($rowCluster + 1), date_format(date_create($cluster["dateOfFirstPayment"]), "F j, Y"));
-                $newSheet->SetCellValue("K" . ($rowCluster + 1), str_replace("WEEKS_", "", $cluster["loanTerm"]) . " Weeks");
-
-
-                $row = $clientStartRow;
-
-                foreach ($cluster["clients"] ?? [] as $index => $client) {
-
-                    $newSheet->setCellValue("A{$row}", $index + 1);
-                    $newSheet->setCellValue("B{$row}", ($client["client"]["firstName"] . " " . $client["client"]["middleName"] . " " . $client["client"]["lastName"]));
-                    $newSheet->setCellValue("C{$row}", $client["loanReceivable"] ?? 0);
-                    $newSheet->setCellValue("D{$row}", $client["skCumulative"] ?? 0);
-                    $newSheet->setCellValue("E{$row}", $client["pastDue"] ?? 0);
-                    $newSheet->setCellValue("G{$row}", $client["weeklyInstallment"] ?? 0);
-
-                    $row++;
-                }
-
-                $rowCluster += 22;
-            }
-        }
-
-        $spreadsheet->removeSheetByIndex(0);
-
-        foreach ($spreadsheet->getAllSheets() as $sheet) {
-
-            $originalTitle = $sheet->getTitle();
-            $newTitle = $originalTitle;
-            $counter = 1;
-
-            while ($finalSpreadsheet->sheetNameExists($newTitle)) {
-                $newTitle = $originalTitle . " " . $counter;
-                $counter++;
-            }
-
-            $sheet->setTitle($newTitle);
-            $finalSpreadsheet->addExternalSheet($sheet);
-        }
-    }
-
-    if ($templateKey === "template_20") {
-
-        $spreadsheet = IOFactory::load(__DIR__ . "/templates/excel/2-ccl-p20.xlsx");
-        $templateSheet = $spreadsheet->getSheet(0);
-        $templateTitle = $templateSheet->getTitle();
-
-        $count = count($groups);
-
-        for ($i = 1; $i <= $count; $i++) {
-
-            $newSheet = $spreadsheet->duplicateWorksheetByTitle($templateTitle);
-            $rowCluster = 4;
-
-            foreach ($groups["group_" . $i] as $_i => $cluster) {
-
-                $staffName = strtoupper($cluster["assignedStaff"]["firstName"] . " " . $cluster["assignedStaff"]["lastName"]);
-                $clusterCode = strtoupper($cluster["assignedStaff"]["codeName"] . "-" . $cluster["code"]);
-
-                $clientStartRow = $rowCluster + 3;
-
-                $newSheet->setCellValue("C{$rowCluster}", $staffName);
-                $newSheet->SetCellValue("G{$rowCluster}", date_format(date_create($cluster["dateOfRelease"]), "F j, Y"));
-                $newSheet->SetCellValue("K{$rowCluster}", date("F j, Y"));
-
-                $newSheet->setCellValue("C" . ($rowCluster + 1), $clusterCode);
-                $newSheet->SetCellValue("G" . ($rowCluster + 1), date_format(date_create($cluster["dateOfFirstPayment"]), "F j, Y"));
-                $newSheet->SetCellValue("K" . ($rowCluster + 1), str_replace("WEEKS_", "", $cluster["loanTerm"]) . " Weeks");
-
-
-                $row = $clientStartRow;
-
-                foreach ($cluster["clients"] ?? [] as $index => $client) {
-
-                    $newSheet->setCellValue("A{$row}", $index + 1);
-                    $newSheet->setCellValue("B{$row}", ($client["client"]["firstName"] . " " . $client["client"]["middleName"] . " " . $client["client"]["lastName"]));
-                    $newSheet->setCellValue("C{$row}", $client["loanReceivable"] ?? 0);
-                    $newSheet->setCellValue("D{$row}", $client["skCumulative"] ?? 0);
-                    $newSheet->setCellValue("E{$row}", $client["pastDue"] ?? 0);
-                    $newSheet->setCellValue("G{$row}", $client["weeklyInstallment"] ?? 0);
-
-                    $row++;
-                }
-
-                $rowCluster += 27;
-            }
-        }
-
-        $spreadsheet->removeSheetByIndex(0);
-
-        foreach ($spreadsheet->getAllSheets() as $sheet) {
-
-            $originalTitle = $sheet->getTitle();
-            $newTitle = $originalTitle;
-            $counter = 1;
-
-            while ($finalSpreadsheet->sheetNameExists($newTitle)) {
-                $newTitle = $originalTitle . " " . $counter;
-                $counter++;
-            }
-
-            $sheet->setTitle($newTitle);
-            $finalSpreadsheet->addExternalSheet($sheet);
-        }
+        $sheet->setTitle($newTitle);
+        $finalSpreadsheet->addExternalSheet($sheet);
     }
 }
-
 
 if ($finalSpreadsheet->getSheetCount() === 0) {
     $finalSpreadsheet->createSheet()->setTitle("EMPTY");
 }
-
 
 header("Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 header("Content-Disposition: attachment; filename='export.xlsx'");
