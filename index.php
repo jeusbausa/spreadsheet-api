@@ -46,6 +46,7 @@ curl_close($ch);
 
 if ($status !== 200 || !$response) {
     header("Content-Type: application/json");
+    http_response_code(500);
     echo json_encode(["message" => "API error"]);
     exit;
 }
@@ -54,6 +55,7 @@ $apiResponse = json_decode($response, true);
 
 if (!isset($apiResponse["data"]["clusters"])) {
     header("Content-Type: application/json");
+    http_response_code(400);
     echo json_encode(["message" => "Invalid response structure"]);
     exit;
 }
