@@ -24,7 +24,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
 }
 
 // $baseUrl = "http://localhost:3000";
-$baseUrl = "https://staging.goodlifemicrolending.com";
+$baseUrl = "https://app.goodlifemicrolending.com";
 
 $clusterIds = isset($_GET["clusterIds"]) ? $_GET["clusterIds"] : null;
 
